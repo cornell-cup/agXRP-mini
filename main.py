@@ -13,6 +13,8 @@ import gc
 # Global variables
 led_state = False
 adc_value = 0
+is_config_mode = False # False = Autonomous | True = Config
+
 
 # --- Hardware Pin Assignments (update these for your wiring) ---
 PLANT_PINS = [
@@ -21,6 +23,7 @@ PLANT_PINS = [
     # {"led": 6, "adc": 2, "pump": 7},   # Plant 3: GP6, ADC2, GP7
     # {"led": 8, "adc": 3, "pump": 9},   # Plant 4: GP8, ADC3, GP9
 ]
+USER_BUTTON = Pin(36, Pin.IN, Pin.PULL_UP) 
 
 # --- Initialize hardware for all plants ---
 leds = [Pin(p["led"], Pin.OUT) for p in PLANT_PINS]
@@ -180,15 +183,23 @@ def start_webserver():
                 pass
 
 def main():
+
+    while not is_config_mode:
+        if USER_BUTTON.value() == 0:
+            is_config_mode = True
+            time.sleep(0.1)
+    
+    # Initialize all LEDs to OFF
+    for l in leds:
+        l.value(False)
+    
     """Main function"""
     print("Starting Pico Web Server...")
     
     # Create WiFi access point
     ap = create_ap()
     
-    # Initialize all LEDs to OFF
-    for l in leds:
-        l.value(False)
+   
     
     # Start web server
     start_webserver()
