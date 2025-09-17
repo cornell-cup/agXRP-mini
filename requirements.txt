@@ -1,0 +1,18 @@
+# MicroPython Requirements for Pico Web Server
+# These modules are built into MicroPython for Raspberry Pi Pico
+
+# Core modules (built-in)
+network          # WiFi functionality
+socket           # Network communication
+machine          # Hardware access (Pin, ADC)
+time             # Time delays
+gc               # Garbage collection
+
+# Hardware requirements
+# - Raspberry Pi Pico W (for WiFi capability)
+# - Built-in LED on GP25
+# - ADC input on GP26 (optional analog sensor)
+
+# Optional hardware for testing
+# - Potentiometer or analog sensor connected to GP26
+# - Breadboard and jumper wires for external connections
