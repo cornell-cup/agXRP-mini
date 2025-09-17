@@ -18,8 +18,8 @@ adc_value = 0
 PLANT_PINS = [
     {"led": "LED", "adc": 0, "pump": 3},   # Plant 1: GP2, ADC0, GP3
     {"led": 4, "adc": 1, "pump": 5},   # Plant 2: GP4, ADC1, GP5
-    {"led": 6, "adc": 2, "pump": 7},   # Plant 3: GP6, ADC2, GP7
-    {"led": 8, "adc": 3, "pump": 9},   # Plant 4: GP8, ADC3, GP9
+    # {"led": 6, "adc": 2, "pump": 7},   # Plant 3: GP6, ADC2, GP7
+    # {"led": 8, "adc": 3, "pump": 9},   # Plant 4: GP8, ADC3, GP9
 ]
 
 # --- Initialize hardware for all plants ---
@@ -28,8 +28,8 @@ adcs = [ADC(p["adc"]) for p in PLANT_PINS]
 pumps = [Pin(p["pump"], Pin.OUT) for p in PLANT_PINS]
 
 # --- Global state for all plants ---
-led_states = [False] * 4
-adc_values = [0] * 4
+led_states = [False] * 2
+adc_values = [0] * 2
 
 def create_ap():
     """Create WiFi Access Point"""
@@ -69,7 +69,7 @@ def generate_html():
 <body>
     <h1>Plant Dashboard</h1>
 """
-    for i in range(4):
+    for i in range(2):
         html += f"""
     <div class="container">
         <h2>Plant {i+1}</h2>
