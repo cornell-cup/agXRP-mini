@@ -72,6 +72,7 @@ def generate_html():
             .attribute input{width: 80px; margin-right: 20px;}
             .text-box{margin: 10px; border: 3px solid grey; border-radius: 5px; padding: 3px;}
             button{padding: 4px; width: 50px;}
+            button:active{translate: 1px 1px}
             .start-btn{background-color: orange; border-radius: 3px; border-style: none;}
             .apply-btn{background-color: lightgreen; border-radius: 3px; border-style: none;}
         </style>
