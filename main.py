@@ -55,6 +55,7 @@ def create_ap():
 
 
 def autonomous_btn_click():
+    pass
     
 
 def generate_html():
@@ -191,12 +192,15 @@ def handle_request(client_socket):
         if method == 'POST' and path.startswith('/api/pump/'):
             try:
                 _, _, _, idx_str, sec_str = path.split('/')
+                print("starting pump")
                 idx = int(idx_str)
+                print(idx)
                 secs = float(sec_str)
                 if idx < 1 or idx > 2:
                     raise ValueError('bad plant index')
 
                 motor = EncodedMotor.get_default_encoded_motor(idx)
+                print(motor)
                 motor.set_effort(1.0)
                 time.sleep(secs)
                 motor.set_effort(0.0)
@@ -270,6 +274,9 @@ def start_webserver():
 def main():
     """Main function"""
     print("Starting Pico Web Server...")
+    global is_config_mode
+    
+    print(USER_BUTTON.value())
     
     while not is_config_mode:
         if USER_BUTTON.value() == 0:
