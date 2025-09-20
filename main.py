@@ -4,6 +4,7 @@ import machine
 import time
 from machine import Pin, ADC
 import gc
+from XRPLib.encoded_motor import EncodedMotor
 
 # Initialize hardware
 #led = Pin(25, Pin.OUT)  # Built-in LED on Pico
@@ -13,8 +14,7 @@ import gc
 # Global variables
 led_state = False
 adc_value = 0
-is_config_mode = False # False = Autonomous | True = Config
-
+is_config_mode = False # False = autonomous | True = Config
 
 # --- Hardware Pin Assignments (update these for your wiring) ---
 PLANT_PINS = [
@@ -23,7 +23,7 @@ PLANT_PINS = [
     # {"led": 6, "adc": 2, "pump": 7},   # Plant 3: GP6, ADC2, GP7
     # {"led": 8, "adc": 3, "pump": 9},   # Plant 4: GP8, ADC3, GP9
 ]
-USER_BUTTON = Pin(36, Pin.IN, Pin.PULL_UP) 
+USER_BUTTON  = Pin(36, Pin.IN, Pin.PULL_UP)
 
 # --- Initialize hardware for all plants ---
 leds = [Pin(p["led"], Pin.OUT) for p in PLANT_PINS]
@@ -31,8 +31,10 @@ adcs = [ADC(p["adc"]) for p in PLANT_PINS]
 pumps = [Pin(p["pump"], Pin.OUT) for p in PLANT_PINS]
 
 # --- Global state for all plants ---
-led_states = [False] * 2
-adc_values = [0] * 2
+led_states = [False] * 4
+adc_values = [0] * 4
+
+# motors = {}
 
 def create_ap():
     """Create WiFi Access Point"""
@@ -49,115 +51,144 @@ def create_ap():
     print('IP Address:', ap.ifconfig()[0])
     return ap
 
+
+def autonomous_btn_click():
+    
+
 def generate_html():
     html = """<!DOCTYPE html>
-<html>
-<head>
-    <title>Plant Dashboard</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        body { font-family: Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; background-color: #f0f0f0; }
-        .container { background-color: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 30px; }
-        h1 { color: #333; text-align: center; margin-bottom: 30px; }
-        .button { background-color: #4CAF50; border: none; color: white; padding: 15px 32px; text-align: center; text-decoration: none; display: inline-block; font-size: 16px; margin: 4px 2px; cursor: pointer; border-radius: 5px; width: 200px; }
-        .button:hover { background-color: #45a049; }
-        .led-button { background-color: #4CAF50; }
-        .led-on { background-color: #ff4444; }
-        .pump-button { background-color: #2196F3; }
-        .pump-button:hover { background-color: #1976D2; }
-        .status { margin: 20px 0; padding: 15px; background-color: #e7f3ff; border-radius: 5px; border-left: 4px solid #2196F3; }
-        .adc-value { font-size: 24px; font-weight: bold; color: #333; }
-    </style>
-</head>
-<body>
-    <h1>Plant Dashboard</h1>
-"""
-    for i in range(2):
-        html += f"""
-    <div class="container">
-        <h2>Plant {i+1}</h2>
-        <div class="status">
-            <strong>LED Status:</strong> {"ON" if led_states[i] else "OFF"}
+    <html lang="en">
+    <head>
+        <title>Plant Dashboard</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+            body{gap: 120px; margin-top: 150px ;background-color: lightgray; display: flex; flex-direction: row; justify-content: center; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;}
+            .plant-box{padding: 20px; background-color: white; border: 3px solid grey; border-radius: 8px; display: flex; flex-direction: column}
+            .plant-box header{text-align: center; margin-bottom: 20px; font-size: 20px;}
+            .attribute{display: flex; flex-direction: row; align-items: center}
+            .attribute p{width: 150px; margin-right: 30px;}
+            .attribute input{width: 80px; margin-right: 20px;}
+            .text-box{margin: 10px; border: 3px solid grey; border-radius: 5px; padding: 3px;}
+            button{padding: 4px; width: 50px;}
+            .start-btn{background-color: orange; border-radius: 3px; border-style: none;}
+            .apply-btn{background-color: lightgreen; border-radius: 3px; border-style: none;}
+        </style>
+    </head>
+    <body>
+        <div class="plant-box">
+            <header>Plant 1</header>
+            <div class="attribute">
+                <p>Soil moisture:</p>
+                <input class="text-box" type="text" readonly>
+            </div>
+            <div class="attribute">
+                <p>Pump for:</p>
+                <input id="pump1" class="text-box" type="text">
+                <button class="start-btn" onclick="runPump(1)">Start</button>
+            </div>
+            <div class="attribute">
+                <p>Moisture threshold:</p>
+                <input class="text-box" type="text">
+                <button class="apply-btn">Apply</button>
+            </div>
+            <div class="attribute">
+                <p>Water seconds:</p>
+                <input class="text-box" type="text">
+                <button class="apply-btn">Apply</button>
+            </div>
         </div>
-        <div style="text-align: center; margin: 20px 0;">
-            <form method="POST" action="/toggle_led_{i}">
-                <button type="submit" class="button led-button{' led-on' if led_states[i] else ''}">
-                    {"Turn OFF LED" if led_states[i] else "Turn ON LED"}
-                </button>
-            </form>
+        <div class="plant-box">
+            <header>Plant 2</header>
+            <div class="attribute">
+                <p>Soil moisture:</p>
+                <input class="text-box" type="text" readonly>
+            </div>
+            <div class="attribute">
+                <p>Pump for:</p>
+                <input id="pump2" class="text-box" type="text">
+                <button class="start-btn" onclick="runPump(2)">Start</button>
+            </div>
+            <div class="attribute">
+                <p>Moisture threshold:</p>
+                <input class="text-box" type="text">
+                <button class="apply-btn">Apply</button>
+            </div>
+            <div class="attribute">
+                <p>Water seconds:</p>
+                <input class="text-box" type="text">
+                <button class="apply-btn">Apply</button>
+            </div>
         </div>
-        <div style="text-align: center; margin: 20px 0;">
-            <form method="POST" action="/read_adc_{i}">
-                <button type="submit" class="button">
-                    Read Soil Moisture Value
-                </button>
-            </form>
-        </div>
-        <div style="text-align: center; margin: 20px 0;">
-            <form method="POST" action="/activate_pump_{i}">
-                <button type="submit" class="button pump-button">
-                    Activate Pump
-                </button>
-            </form>
-        </div>
-        <div class="status">
-            <strong>Latest Soil Moisture Reading:</strong>
-            <div class="adc-value">{adc_values[i]}</div>
-        </div>
-    </div>
-"""
-    html += """
-    <div style="text-align: center; margin-top: 30px; color: #666;">
-        <small>Connected to PicoHotspot WiFi</small>
-    </div>
-</body>
-</html>"""
+        <script>
+            async function runPump(i){
+                const secs = Number(document.getElementById("pump" + i).value || '0');
+                
+                if (isNaN(secs)) {
+                    alert("Please enter a number.");
+                    return;
+                }
+                if (secs <= 0) {
+                    alert("Please enter a number greater than 0.");
+                    return;
+                }
+
+                try {
+                    await fetch('/api/pump/' + i + '/' + secs, { method: 'POST' });
+                } catch (e) {
+                    console.log("Error sending pump request:", e);
+                }
+            }
+        </script>
+    </body>
+    </html>"""
     return html
 
 def handle_request(client_socket):
-    global led_states, adc_values
     try:
-        request = client_socket.recv(1024).decode()
-        if not request:
+        req = client_socket.recv(1024).decode()
+        if not req:
             return
-        lines = request.split('\n')
-        first_line = lines[0]
 
-        if first_line.startswith('GET /'):
-            response = 'HTTP/1.1 200 OK\r\n'
-            response += 'Content-Type: text/html\r\n'
-            response += 'Connection: close\r\n\r\n'
+        first_line = req.split('\n', 1)[0].strip()  # "POST /api/pump/0/2 HTTP/1.1"
+        parts = first_line.split()
+        if len(parts) < 2:
+            return
+        method, path = parts[0], parts[1]
+
+        # Serve HTML
+        if method == 'GET' and path == '/':
+            response = 'HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n'
             response += generate_html()
-        else:
-            handled = False
-            for i in range(4):
-                if first_line.startswith(f'POST /toggle_led_{i}'):
-                    led_states[i] = not led_states[i]
-                    leds[i].value(led_states[i])
-                    handled = True
-                elif first_line.startswith(f'POST /read_adc_{i}'):
-                    adc_values[i] = adcs[i].read_u16()
-                    handled = True
-                elif first_line.startswith(f'POST /activate_pump_{i}'):
-                    pumps[i].value(True)
-                    time.sleep(5)
-                    pumps[i].value(False)
-                    handled = True
-                if handled:
-                    response = 'HTTP/1.1 303 See Other\r\n'
-                    response += 'Location: /\r\n'
-                    response += 'Connection: close\r\n\r\n'
-                    break
-            if not handled:
-                response = 'HTTP/1.1 404 Not Found\r\n'
-                response += 'Content-Type: text/html\r\n'
-                response += 'Connection: close\r\n\r\n'
-                response += '<h1>404 Not Found</h1>'
-        client_socket.send(response.encode())
+            client_socket.send(response.encode())
+            return
+
+        # API: pump
+        if method == 'POST' and path.startswith('/api/pump/'):
+            try:
+                _, _, _, idx_str, sec_str = path.split('/')
+                idx = int(idx_str)
+                secs = float(sec_str)
+                if idx < 1 or idx > 2:
+                    raise ValueError('bad motor/pump index')
+
+                motor = EncodedMotor.get_default_encoded_motor(idx)
+                motor.set_effort(1.0)
+                time.sleep(secs)
+                motor.set_effort(0.0)
+
+                client_socket.send(b'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nOK')
+            except Exception as e:
+                print('pump route error:', e)
+                client_socket.send(b'HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nERR')
+            return
+
+        client_socket.send(b'HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nNot Found')
+
     except Exception as e:
         print(f"Error handling request: {e}")
     finally:
-        client_socket.close()
+        try: client_socket.close()
+        except: pass
 
 def start_webserver():
     """Start the web server"""
@@ -183,26 +214,27 @@ def start_webserver():
                 pass
 
 def main():
-
+    """Main function"""
+    print("Starting Pico Web Server...")
+    
     while not is_config_mode:
         if USER_BUTTON.value() == 0:
             is_config_mode = True
-            time.sleep(0.1)
-    
+            time.sleep(0.5)
+
     # Initialize all LEDs to OFF
     for l in leds:
         l.value(False)
     
-    """Main function"""
-    print("Starting Pico Web Server...")
-    
     # Create WiFi access point
     ap = create_ap()
-    
-   
-    
+
     # Start web server
     start_webserver()
+    
+#     m = EncodedMotor.get_default_encoded_motor(2)
+#     m.set_effort(0.8)
+#     time.sleep(10)
 
 if __name__ == '__main__':
     main()
