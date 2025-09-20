@@ -15,6 +15,8 @@ from XRPLib.encoded_motor import EncodedMotor
 led_state = False
 adc_value = 0
 is_config_mode = False # False = autonomous | True = Config
+moisture_thresholds = [1000, 1000]
+auto_water_seconds = [3.0, 3.0]
 
 # --- Hardware Pin Assignments (update these for your wiring) ---
 PLANT_PINS = [
@@ -88,13 +90,13 @@ def generate_html():
             </div>
             <div class="attribute">
                 <p>Moisture threshold:</p>
-                <input class="text-box" type="text">
-                <button class="apply-btn">Apply</button>
+                <input id="threshold1" class="text-box" type="text">
+                <button class="apply-btn" onclick="applyThreshold(1)">Apply</button>
             </div>
             <div class="attribute">
                 <p>Water seconds:</p>
-                <input class="text-box" type="text">
-                <button class="apply-btn">Apply</button>
+                <input id="water1" class="text-box" type="text">
+                <button class="apply-btn" onclick="applyWater(1)">Apply</button>
             </div>
         </div>
         <div class="plant-box">
@@ -110,13 +112,13 @@ def generate_html():
             </div>
             <div class="attribute">
                 <p>Moisture threshold:</p>
-                <input class="text-box" type="text">
-                <button class="apply-btn">Apply</button>
+                <input id="threshold2" class="text-box" type="text">
+                <button class="apply-btn" onclick="applyThreshold(2)">Apply</button>
             </div>
             <div class="attribute">
                 <p>Water seconds:</p>
-                <input class="text-box" type="text">
-                <button class="apply-btn">Apply</button>
+                <input id="water2" class="text-box" type="text">
+                <button class="apply-btn" onclick="applyWater(2)">Apply</button>
             </div>
         </div>
         <script>
@@ -137,6 +139,28 @@ def generate_html():
                 } catch (e) {
                     console.log("Error sending pump request:", e);
                 }
+            }
+
+            async function applyThreshold(i){
+                thresholdValue = Number(document.getElementById("threshold" + i).value);
+
+                try{
+                    await fetch('/api/set_threshold/' + i + '/' + thresholdValue, { method: 'POST' });
+                } catch (e){
+                    console.log("error setting moisture threhold:", e);
+                }
+
+            }
+
+            async function applyWater(i){
+                waterValue = Number(document.getElementById("water" + i).value);
+
+                try{
+                    await fetch('/api/set_water/' + i + '/' + waterValue, { method: 'POST' });
+                } catch (e){
+                    console.log("error setting water duration:", e);
+                }
+
             }
         </script>
     </body>
@@ -169,7 +193,7 @@ def handle_request(client_socket):
                 idx = int(idx_str)
                 secs = float(sec_str)
                 if idx < 1 or idx > 2:
-                    raise ValueError('bad motor/pump index')
+                    raise ValueError('bad plant index')
 
                 motor = EncodedMotor.get_default_encoded_motor(idx)
                 motor.set_effort(1.0)
@@ -179,6 +203,35 @@ def handle_request(client_socket):
                 client_socket.send(b'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nOK')
             except Exception as e:
                 print('pump route error:', e)
+                client_socket.send(b'HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nERR')
+            return
+        
+        # API: set per-plant moisture threshold
+        if method == 'POST' and path.startswith('/api/set_threshold/'):
+            try:
+                _, _, _, idx_str, val_str = path.split('/')
+                idx = int(idx_str)  
+                threshold_val = int(val_str)
+                if idx < 1 or idx > 2: raise ValueError('bad plant index')
+                moisture_thresholds[idx-1] = threshold_val
+                client_socket.send(b'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nOK')
+            except Exception as e:
+                print('set_threshold error:', e)
+                client_socket.send(b'HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nERR')
+            return
+        
+        # API: set per-plant autonomous watering duration (seconds)
+        if method == 'POST' and path.startswith('/api/set_water/'):
+            try:
+                _, _, _, idx_str, val_str = path.split('/')
+                idx = int(idx_str)
+                water_secs = float(val_str)
+                if idx < 1 or idx > 2: raise ValueError('bad plant index')
+                if secs < 0: raise ValueError('PLease enter non-negative seconds')
+                auto_water_seconds[idx-1] = water_secs
+                client_socket.send(b'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nOK')
+            except Exception as e:
+                print('set_water error:', e)
                 client_socket.send(b'HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nERR')
             return
 
