@@ -61,26 +61,51 @@ def autonomous_btn_click():
 def generate_html():
     html = """<!DOCTYPE html>
     <html lang="en">
-    <head>
-        <title>Plant Dashboard</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>
-            body{gap: 120px; margin-top: 150px ;background-color: lightgray; display: flex; flex-direction: row; justify-content: center; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;}
-            .plant-box{padding: 20px; background-color: white; border: 3px solid grey; border-radius: 8px; display: flex; flex-direction: column}
-            .plant-box header{text-align: center; margin-bottom: 20px; font-size: 20px;}
-            .attribute{display: flex; flex-direction: row; align-items: center}
-            .attribute p{width: 150px; margin-right: 30px;}
-            .attribute input{width: 80px; margin-right: 20px;}
-            .text-box{margin: 10px; border: 3px solid grey; border-radius: 5px; padding: 3px;}
-            button{padding: 4px; width: 50px;}
-            button:active{translate: 1px 1px}
-            .start-btn{background-color: orange; border-radius: 3px; border-style: none;}
-            .apply-btn{background-color: lightgreen; border-radius: 3px; border-style: none;}
-        </style>
-    </head>
-    <body>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body{margin-top: 150px ;background-color: lightgray; display: flex; flex-direction: column; justify-content: center; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;}
+        .plants-area{display: flex; flex-direction: row; gap: 120px; justify-content: center;}
+        .plant-box{padding: 20px; background-color: white; border: 3px solid grey; border-radius: 8px; display: flex; flex-direction: column}
+        .plant-box header{text-align: center; margin-bottom: 20px; font-size: 20px;}
+        .attribute{display: flex; flex-direction: row; align-items: center}
+        .attribute p{width: 150px; margin-right: 30px;}
+        .attribute input{width: 80px; margin-right: 20px;}
+        .text-box{margin: 10px; border: 3px, solid, grey; border-radius: 5px; padding: 3px;}
+        button{padding: 4px; width: 50px;}
+        button:active{translate: 1px 1px}
+        .start-btn{background-color: orange; border-radius: 3px; border-style: none;}
+        .apply-btn{background-color: lightgreen; border-radius: 3px; border-style: none;}
+        .auto-button{background-color: mediumblue; border-radius: 3px; color: white; width: 120px;height: 80px;}
+        .auto-button-container{display: flex; justify-content: center; margin-top: 20px;}
+    </style>
+</head>
+<body>
+    <div class="plants-area">
         <div class="plant-box">
             <header>Plant 1</header>
+            <div class="attribute">
+                <p>Soil moisture:</p>
+                <input class="text-box" type="text" readonly>
+            </div>
+            <div class="attribute">
+                <p>Pump for:</p>
+                <input id="pump0" class="text-box" type="text">
+                <button class="start-btn" onclick="runPump(0)">Start</button>
+            </div>
+            <div class="attribute">
+                <p>Moisture threshold:</p>
+                <input class="text-box" type="text">
+                <button class="apply-btn">Apply</button>
+            </div>
+            <div class="attribute">
+                <p>Water seconds:</p>
+                <input class="text-box" type="text">
+                <button class="apply-btn">Apply</button>
+            </div>
+        </div>
+        <div class="plant-box">
+            <header>Plant 2</header>
             <div class="attribute">
                 <p>Soil moisture:</p>
                 <input class="text-box" type="text" readonly>
@@ -92,37 +117,19 @@ def generate_html():
             </div>
             <div class="attribute">
                 <p>Moisture threshold:</p>
-                <input id="threshold1" class="text-box" type="text">
-                <button class="apply-btn" onclick="applyThreshold(1)">Apply</button>
+                <input class="text-box" type="text">
+                <button class="apply-btn">Apply</button>
             </div>
             <div class="attribute">
                 <p>Water seconds:</p>
-                <input id="water1" class="text-box" type="text">
-                <button class="apply-btn" onclick="applyWater(1)">Apply</button>
+                <input class="text-box" type="text">
+                <button class="apply-btn">Apply</button>
             </div>
         </div>
-        <div class="plant-box">
-            <header>Plant 2</header>
-            <div class="attribute">
-                <p>Soil moisture:</p>
-                <input class="text-box" type="text" readonly>
-            </div>
-            <div class="attribute">
-                <p>Pump for:</p>
-                <input id="pump2" class="text-box" type="text">
-                <button class="start-btn" onclick="runPump(2)">Start</button>
-            </div>
-            <div class="attribute">
-                <p>Moisture threshold:</p>
-                <input id="threshold2" class="text-box" type="text">
-                <button class="apply-btn" onclick="applyThreshold(2)">Apply</button>
-            </div>
-            <div class="attribute">
-                <p>Water seconds:</p>
-                <input id="water2" class="text-box" type="text">
-                <button class="apply-btn" onclick="applyWater(2)">Apply</button>
-            </div>
-        </div>
+    </div>
+    <div class="auto-button-container">
+        <button class="auto-button">Autonomous Mode</button>
+    </div>
         <script>
             async function runPump(i){
                 const secs = Number(document.getElementById("pump" + i).value || '0');
