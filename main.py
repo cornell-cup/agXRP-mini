@@ -7,6 +7,7 @@ from machine import Pin, ADC
 import gc
 from XRPLib.encoded_motor import EncodedMotor
 from XRPLib.board import Board
+import ncsv
 
 # -------------------------------
 # Global configuration & hardware
@@ -80,7 +81,6 @@ def create_ap():
 # HTTP / HTML frontend
 # --------------------
 def generate_html():
-    # (kept your HTML; small IDs could be added to threshold/water inputs if you wire up those JS functions)
     html = """<!DOCTYPE html>
 <html lang="en">
 <head>
