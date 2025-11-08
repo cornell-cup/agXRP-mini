@@ -7,7 +7,6 @@ from machine import Pin, ADC
 import gc
 from XRPLib.encoded_motor import EncodedMotor
 from XRPLib.board import Board
-import ncsv
 
 # -------------------------------
 # Global configuration & hardware
@@ -46,8 +45,81 @@ adc_values = [0]     * len(PLANT_PINS)
 # A simple per-plant lock so pump actions don't overlap
 pump_locks = [asyncio.Lock() for _ in PLANT_PINS]
 
+# Track last log time for each plant (in seconds since start)
+last_reading_log_time = [0] * len(PLANT_PINS)
+READING_LOG_INTERVAL = 1800  # 30 minutes in seconds
+
+# Time tracking (software clock)
+# Store as [year, month, day, hour, minute, second]
+current_time = [2025, 1, 1, 0, 0, 0]
+time_configured = False
+uptime_seconds = 0  # Track elapsed seconds since startup
+
+def format_time():
+    """Format current time as YYYY-MM-DD HH:MM:SS"""
+    return f"{current_time[0]:04d}-{current_time[1]:02d}-{current_time[2]:02d} {current_time[3]:02d}:{current_time[4]:02d}:{current_time[5]:02d}"
+
+def increment_time():
+    """Increment the software clock by one second"""
+    global uptime_seconds
+    uptime_seconds += 1
+
+    current_time[5] += 1
+    if current_time[5] >= 60:
+        current_time[5] = 0
+        current_time[4] += 1
+        if current_time[4] >= 60:
+            current_time[4] = 0
+            current_time[3] += 1
+            if current_time[3] >= 24:
+                current_time[3] = 0
+                current_time[2] += 1
+                # Simple month handling (assume 31 days for simplicity)
+                if current_time[2] > 31:
+                    current_time[2] = 1
+                    current_time[1] += 1
+                    if current_time[1] > 12:
+                        current_time[1] = 1
+                        current_time[0] += 1
+
 
 board = Board.get_default_board()
+
+# CSV logging setup
+CSV_FILENAME = "plant_log.csv"
+
+def init_csv_log():
+    """Initialize CSV log file with headers if it doesn't exist."""
+    try:
+        # Check if file exists by trying to open it
+        with open(CSV_FILENAME, 'r') as f:
+            pass
+        print(f"CSV log file '{CSV_FILENAME}' exists, appending to it.")
+    except OSError:
+        # File doesn't exist, create it with headers
+        print(f"Creating new CSV log file: {CSV_FILENAME}")
+        with open(CSV_FILENAME, 'w') as f:
+            f.write('timestamp,plant_id,moisture,threshold,action,duration_sec\n')
+
+def log_to_csv(plant_id, moisture, threshold, action, duration=0):
+    """
+    Log a data entry to CSV.
+
+    Args:
+        plant_id: Plant index (0, 1, 2, ...)
+        moisture: Current ADC moisture reading
+        threshold: Moisture threshold for this plant
+        action: String describing action ('auto_water', 'manual_water', 'reading')
+        duration: Watering duration in seconds (0 if no watering)
+    """
+    try:
+        timestamp = format_time()
+        with open(CSV_FILENAME, 'a') as f:
+            # Write CSV row manually
+            f.write(f'{timestamp},{plant_id},{moisture},{threshold},{action},{duration}\n')
+        print(f"Logged: {timestamp} | Plant {plant_id}, Moisture={moisture}, Action={action}")
+    except Exception as e:
+        print(f"Error logging to CSV: {e}")
 
 def _send_json(sock, obj, code=200):
     import json
@@ -86,7 +158,13 @@ def generate_html():
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-body{margin-top:150px;background-color:lightgray;display:flex;flex-direction:column;justify-content:center;font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;}
+body{margin-top:50px;background-color:lightgray;display:flex;flex-direction:column;justify-content:center;font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;}
+.time-section{background-color:white;border:3px solid grey;border-radius:8px;padding:20px;margin:20px auto;max-width:600px;}
+.time-section header{text-align:center;margin-bottom:15px;font-size:22px;font-weight:bold;}
+.time-display{text-align:center;font-size:24px;margin:15px 0;padding:10px;background-color:#f0f0f0;border-radius:5px;}
+.time-setter{display:flex;flex-direction:row;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;}
+.time-setter input{width:60px;padding:5px;border:2px solid grey;border-radius:3px;text-align:center;}
+.time-setter label{font-size:14px;}
 .plants-area{display:flex;flex-direction:row;gap:120px;justify-content:center;}
 .plant-box{padding:20px;background-color:white;border:3px solid grey;border-radius:8px;display:flex;flex-direction:column}
 .plant-box header{text-align:center;margin-bottom:20px;font-size:20px;}
@@ -98,11 +176,31 @@ button{padding:4px;width:50px;}
 button:active{translate:1px 1px}
 .start-btn{background-color:orange;border-radius:3px;border-style:none;}
 .apply-btn{background-color:lightgreen;border-radius:3px;border-style:none;}
+.set-time-btn{background-color:dodgerblue;border-radius:3px;border-style:none;color:white;width:100px;padding:8px;}
 .auto-button{background-color:mediumblue;border-radius:3px;color:white;width:120px;height:80px;}
 .auto-button-container{display:flex;justify-content:center;margin-top:20px;}
 </style>
 </head>
 <body>
+<div class="time-section">
+  <header>System Time</header>
+  <div class="time-display" id="current-time">--:--:--</div>
+  <div class="time-setter">
+    <label>Year:</label>
+    <input id="year" type="number" min="2000" max="2100" value="2025">
+    <label>Month:</label>
+    <input id="month" type="number" min="1" max="12" value="1">
+    <label>Day:</label>
+    <input id="day" type="number" min="1" max="31" value="1">
+    <label>Hour:</label>
+    <input id="hour" type="number" min="0" max="23" value="0">
+    <label>Min:</label>
+    <input id="minute" type="number" min="0" max="59" value="0">
+    <label>Sec:</label>
+    <input id="second" type="number" min="0" max="59" value="0">
+    <button class="set-time-btn" onclick="setTime()">Set Time</button>
+  </div>
+</div>
 <div class="plants-area">
   <div class="plant-box">
     <header>Plant 1</header>
@@ -153,6 +251,39 @@ button:active{translate:1px 1px}
   <button class="auto-button" onclick="toggleAutonomous()">Autonomous Mode</button>
 </div>
 <script>
+async function setTime(){
+  const year = Number(document.getElementById("year").value);
+  const month = Number(document.getElementById("month").value);
+  const day = Number(document.getElementById("day").value);
+  const hour = Number(document.getElementById("hour").value);
+  const minute = Number(document.getElementById("minute").value);
+  const second = Number(document.getElementById("second").value);
+
+  if (isNaN(year) || isNaN(month) || isNaN(day) || isNaN(hour) || isNaN(minute) || isNaN(second)){
+    alert("Please enter valid numbers for all time fields");
+    return;
+  }
+
+  try {
+    const url = `/api/set_time/${year}/${month}/${day}/${hour}/${minute}/${second}`;
+    await fetch(url, { method: 'POST' });
+    alert("Time set successfully!");
+  } catch(e){
+    console.log("error setting time:", e);
+    alert("Error setting time");
+  }
+}
+
+async function updateTime(){
+  try{
+    const res = await fetch('/api/get_time', { method: 'GET' });
+    const json_res = await res.json();
+    document.getElementById("current-time").textContent = json_res.time;
+  } catch (e){
+    console.log("error updating time: ", e)
+  }
+}
+
 async function runPump(i){
   const secs = Number(document.getElementById("pump" + i).value || '0');
   if (isNaN(secs)){ alert("Please enter a number."); return; }
@@ -172,21 +303,23 @@ async function applyWater(i){
   try { await fetch('/api/set_water/' + i + '/' + v, { method: 'POST' }); }
   catch(e){ console.log("error setting water duration:", e); }
 }
- async function updateSoil(i){
-                try{
-                    const res = await fetch('/api/update_soil/' + i, { method: 'GET' });
-                    const json_res = await res.json();
-                    document.getElementById("soil-field" + i).value = json_res.raw;
-                } catch (e){
-                    console.log("error updating soil moisture: ", e)
-                }
-            }
+async function updateSoil(i){
+  try{
+    const res = await fetch('/api/update_soil/' + i, { method: 'GET' });
+    const json_res = await res.json();
+    document.getElementById("soil-field" + i).value = json_res.raw;
+  } catch (e){
+    console.log("error updating soil moisture: ", e)
+  }
+}
 
-            setInterval(() => updateSoil(0), 1000);
-            setInterval(() => updateSoil(1), 1000);
-            updateSoil(0);
-            updateSoil(1);
-        
+setInterval(() => updateTime(), 1000);
+setInterval(() => updateSoil(0), 1000);
+setInterval(() => updateSoil(1), 1000);
+updateTime();
+updateSoil(0);
+updateSoil(1);
+
 async function toggleAutonomous(){
   try { await fetch('/api/toggle_mode', { method: 'POST' }); }
   catch(e){ console.log("error toggling mode:", e); }
@@ -233,6 +366,50 @@ async def handle_client(reader, writer):
             writer.write(b'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nOK')
             await writer.drain()
             return
+
+        # API: get current time
+        if method == 'GET' and path == '/api/get_time':
+            try:
+                import json
+                time_str = format_time()
+                body = json.dumps({"time": time_str, "configured": time_configured}).encode()
+                hdr = (
+                    "HTTP/1.1 200 OK\r\n"
+                    "Content-Type: application/json\r\n"
+                    "Cache-Control: no-store\r\n"
+                    "Connection: close\r\n\r\n"
+                ).encode()
+                writer.write(hdr + body)
+            except Exception as e:
+                print('error getting time', e)
+                writer.write(b'HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nERR')
+            await writer.drain()
+            return
+
+        # API: set time
+        if method == 'POST' and path.startswith('/api/set_time/'):
+            try:
+                global time_configured
+                parts = path.split('/')
+                if len(parts) != 9:
+                    raise ValueError('invalid time format')
+                _, _, _, year_str, month_str, day_str, hour_str, min_str, sec_str = parts
+
+                current_time[0] = int(year_str)
+                current_time[1] = int(month_str)
+                current_time[2] = int(day_str)
+                current_time[3] = int(hour_str)
+                current_time[4] = int(min_str)
+                current_time[5] = int(sec_str)
+                time_configured = True
+
+                print(f"Time set to: {format_time()}")
+                writer.write(b'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nOK')
+            except Exception as e:
+                print('set_time error:', e)
+                writer.write(b'HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nERR')
+            await writer.drain()
+            return
         
         #API: get soil moisture
         if method == 'GET' and path.startswith('/api/update_soil/'):
@@ -267,11 +444,20 @@ async def handle_client(reader, writer):
                 if secs <= 0:
                     raise ValueError('seconds must be > 0')
 
+                # Read current moisture before watering
+                try:
+                    current_moisture = SOIL_ADCs[idx].read_u16()
+                except:
+                    current_moisture = 0
+
                 async with pump_locks[idx]:
                     motor = EncodedMotor.get_default_encoded_motor(idx + 1)
                     motor.set_effort(1.0)
                     await asyncio.sleep(secs)
                     motor.set_effort(0.0)
+
+                # Log the manual watering event
+                log_to_csv(idx, current_moisture, moisture_thresholds[idx], 'manual_water', secs)
 
                 writer.write(b'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nOK')
             except Exception as e:
@@ -412,8 +598,31 @@ async def autonomous_cycle_once():
                     motor.set_effort(1.0)
                     await asyncio.sleep(secs)
                     motor.set_effort(0.0)
+                    # Log the automatic watering event (always log watering)
+                    log_to_csv(i, adc_values[i], moisture_thresholds[i], 'auto_water', secs)
+                    # Reset the reading log timer since we just logged
+                    last_reading_log_time[i] = uptime_seconds
             except Exception as e:
                 print("Pump error:", e)
+        else:
+            # Log regular moisture reading only every 30 minutes
+            time_since_last_log = uptime_seconds - last_reading_log_time[i]
+            if time_since_last_log >= READING_LOG_INTERVAL:
+                log_to_csv(i, adc_values[i], moisture_thresholds[i], 'reading', 0)
+                last_reading_log_time[i] = uptime_seconds
+
+
+# -------------------
+# Time keeper task
+# -------------------
+async def time_keeper():
+    """Background task that increments the software clock every second."""
+    while True:
+        try:
+            await asyncio.sleep(1)
+            increment_time()
+        except Exception as e:
+            print("Time keeper error:", e)
 
 
 # -------------------
@@ -450,7 +659,11 @@ async def main():
 
     print("Starting Pico (u)asyncio app...")
 
-    # Kick off the button watcher (no threads)
+    # Initialize CSV logging
+    init_csv_log()
+
+    # Kick off background tasks (no threads)
+    asyncio.create_task(time_keeper())
     asyncio.create_task(button_watcher())
 
     # Start in autonomous unless user flips the mode
