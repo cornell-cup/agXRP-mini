@@ -91,7 +91,7 @@ CSV_FILENAME = "plant_log.csv"
 def init_csv_log():
     """Initialize CSV log file with headers if it doesn't exist."""
     try:
-        # Check if file exists by trying to open it
+        #Check if file exists by trying to open it#
         with open(CSV_FILENAME, 'r') as f:
             pass
         print(f"CSV log file '{CSV_FILENAME}' exists, appending to it.")
@@ -332,6 +332,8 @@ async function toggleAutonomous(){
 
 async def handle_client(reader, writer):
     """Async HTTP 1.0/1.1 handler (very small, just enough for this UI)."""
+    global is_config_mode, time_configured
+
     try:
         req = await reader.read(1024)
         if not req:
@@ -361,7 +363,6 @@ async def handle_client(reader, writer):
 
         # Toggle mode (UI button) — flips to autonomous and button task will also work
         if method == 'POST' and path == '/api/toggle_mode':
-            global is_config_mode
             is_config_mode = not is_config_mode
             writer.write(b'HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nOK')
             await writer.drain()
@@ -389,7 +390,6 @@ async def handle_client(reader, writer):
         # API: set time
         if method == 'POST' and path.startswith('/api/set_time/'):
             try:
-                global time_configured
                 parts = path.split('/')
                 if len(parts) != 9:
                     raise ValueError('invalid time format')
@@ -695,5 +695,3 @@ finally:
             motor.set_effort(0.0)
     except:
         pass
-
-
